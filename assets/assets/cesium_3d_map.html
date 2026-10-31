@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>3D Map</title>
+
+  <!-- CesiumJS CDN -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.116/Build/Cesium/Widgets/widgets.css" rel="stylesheet" />
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #0a0a0a;
+    }
+
+    #cesiumContainer {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Hide Cesium branding */
+    .cesium-widget-credits {
+      display: none !important;
+    }
+
+    .cesium-infoBox {
+      display: none !important;
+    }
+
+    .cesium-toolbar {
+      display: none !important;
+    }
+
+    .cesium-viewer-animationContainer {
+      display: none !important;
+    }
+
+    .cesium-viewer-timelineContainer {
+      display: none !important;
+    }
+
+    .cesium-viewer-fullscreenContainer {
+      display: none !important;
+    }
+
+    .cesium-viewer-vrContainer {
+      display: none !important;
+    }
+
+    .cesium-viewer-geocoderContainer {
+      display: none !important;
+    }
+
+    .cesium-viewer-bottom {
+      display: none !important;
+    }
+
+    .cesium-viewer-selectionIndicatorContainer {
+      display: none !important;
+    }
+
+    /* Loading overlay */
+    #loadingOverlay {
+      position: fixed;
+      inset: 0;
+      background: #0d1117;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      transition: opacity 0.6s ease;
+    }
+
+    #loadingOverlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(193, 148, 24, 0.2);
+      border-top-color: #C19418;
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading-text {
+      margin-top: 16px;
+      color: #C19418;
+      font-family: -apple-system, Arial, sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .loading-sub {
+      margin-top: 6px;
+      color: rgba(255, 255, 255, 0.4);
+      font-family: -apple-system, Arial, sans-serif;
+      font-size: 12px;
+    }
+
+    /* Center crosshair pin */
+    #centerPin {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -100%);
+      pointer-events: none;
+      z-index: 100;
+      filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6));
+    }
+
+    #centerPin svg {
+      width: 44px;
+      height: 44px;
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Loading overlay -->
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="loading-text">جاري تحميل الخريطة ثلاثية الأبعاد</div>
+    <div class="loading-sub">Google Photorealistic 3D Tiles</div>
+  </div>
+
+  <!-- Map container -->
+  <div id="cesiumContainer"></div>
+
+  <!-- Fixed center pin -->
+  <div id="centerPin">
+    <svg viewBox="0 0 24 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path d="M12 0C5.373 0 0 5.373 0 12c0 9 12 24 12 24s12-15 12-24C24 5.373 18.627 0 12 0z" fill="#C19418" />
+      <circle cx="12" cy="12" r="5" fill="white" />
+    </svg>
+  </div>
+
+  <script>
+    // ─── Config ──────────────────────────────────────────────────────────────────
+    // ⚠️ استخدم API Key جديد بدون "Application restrictions" مخصص لـ Map Tiles API فقط
+    // Google Cloud Console → Credentials → + Create Credentials → API key → Application restrictions: None → API restrictions: Map Tiles API
+    const GOOGLE_API_KEY = 'AIzaSyDioNx6qrY4bW3EObd-PYt_5Xl_l_h8jgg'; // ← Google Maps API Key
+    const GOOGLE_3D_TILES_URL =
+      `https://tile.googleapis.com/v1/3dtiles/root.json?key=${GOOGLE_API_KEY}`;
+
+    // No Cesium Ion token needed when using Google tiles directly
+    Cesium.Ion.defaultAccessToken = '';
+
+    // ─── Viewer setup ─────────────────────────────────────────────────────────────
+    // Start with ESRI satellite as fallback base layer
+    const esriFallback = new Cesium.ArcGisMapServerImageryProvider({
+      url: 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer',
+      enablePickFeatures: false,
+    });
+
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+      timeline: false,
+      animation: false,
+      fullscreenButton: false,
+      vrButton: false,
+      homeButton: false,
+      sceneModePicker: false,
+      navigationHelpButton: false,
+      geocoder: false,
+      infoBox: false,
+      selectionIndicator: false,
+      baseLayerPicker: false,
+      imageryProvider: esriFallback,
+      terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+    });
+
+    // Mobile performance
+    viewer.scene.fxaa = false;
+    viewer.scene.postProcessStages.fxaa.enabled = false;
+    viewer.scene.msaaSamples = 1;
+    viewer.scene.globe.show = true;
+    viewer.scene.globe.depthTestAgainstTerrain = false;
+
+    // ─── Google Maps Tile API: Satellite base + Labels on top ─────────────────
+    async function createSession(mapType, layerTypes) {
+      const body = { mapType, language: 'ar', region: 'EG', scale: 'scaleFactor1x' };
+      if (layerTypes) body.layerTypes = layerTypes;
+      const resp = await fetch(
+        `https://tile.googleapis.com/v1/createSession?key=${GOOGLE_API_KEY}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+      );
+      if (!resp.ok) throw new Error(`Session ${mapType} failed: ${resp.status}`);
+      const data = await resp.json();
+      return data.session;
+    }
+
+    // Imagery layer references — created once, swapped when user toggles 2D/3D
+    let satLayerUrl   = null;
+    let roadLayerUrl  = null;
+    let is3DMode      = false; // Start in 2D (roadmap) mode
+
+    async function initGoogleMapLayer() {
+      try {
+        // Satellite session (for 3D fallback)
+        const satSession = await createSession('satellite');
+        satLayerUrl = `https://tile.googleapis.com/v1/2dtiles/{z}/{x}/{y}?session=${satSession}&key=${GOOGLE_API_KEY}`;
+        
+        // Use high-density XYZ tiles for the 2D roadmap so ALL markets/restaurants appear
+        // scale=2 for retina sharpness and maximum POI density
+        roadLayerUrl = 'https://mt1.google.com/vt/lyrs=m&hl=ar&gl=EG&scale=2&x={x}&y={y}&z={z}';
+
+        // Start in 2D mode → show roadmap (Google Maps with streets + labels + POIs)
+        viewer.imageryLayers.removeAll();
+        viewer.imageryLayers.addImageryProvider(
+          new Cesium.UrlTemplateImageryProvider({ 
+            url: roadLayerUrl, 
+            maximumLevel: 20, 
+            tileWidth: 512, // Because scale=2 returns 512x512
+            tileHeight: 512,
+            credit: 'Google Maps' 
+          })
+        );
+        console.log('✅ 2D roadmap + 3D satellite ready');
+      } catch (e) {
+        console.warn('Google map sessions failed, using ESRI fallback:', e.message);
+      }
+    }
+
+    // ─── Load Google Photorealistic 3D Tiles ─────────────────────────────────────
+    let tileset = null;
+    let tiles3DAvailable = false;
+
+    async function loadGoogleTiles() {
+      // Step 1: Initialize Google Maps layers (satellite + labels) — always works
+      await initGoogleMapLayer();
+
+      // Step 2: Try to load 3D tiles (may fail if API key has Android restrictions)
+      // On failure → fall back gracefully to satellite mode (still fully usable)
+      try {
+        tileset = await Cesium.Cesium3DTileset.fromUrl(GOOGLE_3D_TILES_URL, {
+          maximumScreenSpaceError: 16,
+          skipLevelOfDetail: true,
+          dynamicScreenSpaceError: true,
+          maximumMemoryUsage: 128,
+        });
+        viewer.scene.primitives.add(tileset);
+        tiles3DAvailable = true;
+        console.log('✅ 3D Tiles loaded');
+      } catch (err) {
+        // 3D tiles failed (API key restriction) — satellite mode is fine for picking
+        console.warn('3D tiles unavailable, using satellite mode:', err.message || err);
+        tiles3DAvailable = false;
+        // Disable globe depth test so satellite imagery looks clean
+        viewer.scene.globe.depthTestAgainstTerrain = false;
+      }
+
+      // Tell Flutter the map is ready.
+      // Do NOT hide the loading screen or move the camera here.
+      // Flutter will get the user's GPS, reverse geocode it, fly the camera,
+      // and THEN tell JS to hide the loading screen.
+      postToFlutter({ type: 'ready' });
+    }
+
+    function showError(msg) {
+      const overlay = document.getElementById('loadingOverlay');
+      if (overlay) {
+        overlay.innerHTML = `
+      <div style="color:#e53935;font-family:sans-serif;text-align:center;padding:24px">
+        <div style="font-size:36px">⚠️</div>
+        <div style="font-size:15px;font-weight:600;margin-top:12px">فشل تحميل الخريطة</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.5);margin-top:8px;direction:ltr">${msg}</div>
+        <div style="font-size:11px;color:#C19418;margin-top:12px">تأكد من تفعيل Map Tiles API</div>
+      </div>`;
+        overlay.style.display = 'flex';
+        overlay.style.opacity = '1';
+      }
+    }
+
+    function hideLoading() {
+      const overlay = document.getElementById('loadingOverlay');
+      if (overlay) {
+        overlay.classList.add('hidden');
+        setTimeout(() => { if (overlay) overlay.style.display = 'none'; }, 700);
+      }
+    }
+
+    // Expose hideLoading to Flutter
+    window.hideLoading = hideLoading;
+
+    // Safety timeout: hide loading after 30s regardless
+    setTimeout(() => hideLoading(), 30000);
+
+    // ─── State ────────────────────────────────────────────────────────────────────
+    let selectedLat = null;
+    let selectedLng = null;
+    let geocodeTimer = null;
+
+    // ─── Flutter ↔ JS communication ──────────────────────────────────────────────
+    function postToFlutter(data) {
+      try {
+        if (window.FlutterChannel) {
+          window.FlutterChannel.postMessage(JSON.stringify(data));
+        }
+      } catch (e) { }
+    }
+
+    // Called from Flutter to fly to a location
+    window.flyTo = function (lat, lng, alt) {
+      alt = alt || 1200;
+      const target = Cesium.Cartesian3.fromDegrees(lng, lat, 0); // Ground level target
+      const pitch = is3DMode ? Cesium.Math.toRadians(-45) : Cesium.Math.toRadians(-89);
+      const range = alt / Math.sin(Math.abs(pitch));
+      
+      viewer.camera.flyToBoundingSphere(
+        new Cesium.BoundingSphere(target, 0),
+        { 
+          offset: new Cesium.HeadingPitchRange(0, pitch, range), 
+          duration: 2.0,
+          easingFunction: Cesium.EasingFunction.QUARTIC_IN_OUT,
+        }
+      );
+      // Set immediately for fast geocode response
+      selectedLat = lat;
+      selectedLng = lng;
+    };
+
+    // Called from Flutter to toggle 3D (satellite+tilt) / 2D (roadmap+topdown)
+    window.setTilt = function (enable3D) {
+      is3DMode = enable3D;
+
+      // ── Switch imagery ────────────────────────────────────────────
+      viewer.imageryLayers.removeAll();
+      const tileUrl = enable3D ? satLayerUrl : roadLayerUrl;
+      if (tileUrl) {
+        viewer.imageryLayers.addImageryProvider(
+          new Cesium.UrlTemplateImageryProvider({
+            url: tileUrl, 
+            maximumLevel: 20,
+            tileWidth: enable3D ? 256 : 512, // scale=2 for roadmap
+            tileHeight: enable3D ? 256 : 512,
+            credit: enable3D ? 'Google Satellite' : 'Google Maps',
+          })
+        );
+      }
+      if (tileset) tileset.show = enable3D;
+
+      // ── Orbit around current ground anchor ────────────────────────
+      // Get exact ground point under crosshair BEFORE changing angle
+      const screenCenter = new Cesium.Cartesian2(
+        viewer.canvas.clientWidth / 2, viewer.canvas.clientHeight / 2
+      );
+      const ray    = viewer.camera.getPickRay(screenCenter);
+      const anchor = viewer.scene.globe.pick(ray, viewer.scene);
+      const alt    = viewer.camera.positionCartographic
+                       ? viewer.camera.positionCartographic.height : 1200;
+
+      if (anchor) {
+        const pitch = enable3D ? Cesium.Math.toRadians(-45) : Cesium.Math.toRadians(-89);
+        // range = distance camera→anchor keeping altitude constant
+        const range = alt / Math.sin(Math.abs(pitch));
+        viewer.camera.flyToBoundingSphere(
+          new Cesium.BoundingSphere(anchor, 0),
+          { offset: new Cesium.HeadingPitchRange(0, pitch, range), duration: 1.0 }
+        );
+      }
+    };
+
+    // Zoom helpers
+    window.zoomIn = function () { viewer.camera.zoomIn(viewer.camera.positionCartographic.height * 0.3); };
+    window.zoomOut = function () { viewer.camera.zoomOut(viewer.camera.positionCartographic.height * 0.5); };
+
+    // Confirm current center position → triggers reverse geocode via Flutter
+    window.confirmLocation = function () {
+      if (selectedLat !== null && selectedLng !== null) {
+        postToFlutter({ type: 'confirm', lat: selectedLat, lng: selectedLng });
+      }
+    };
+
+    // ─── Camera move → update center coords ──────────────────────────────────────
+    // globe.show=true → use globe.pick() to get the ACTUAL ground point under the pin.
+    // camera.positionCartographic gives where the camera IS (in the air), NOT where
+    // the crosshair points on the ground — these differ by km when camera is tilted!
+    viewer.scene.postRender.addEventListener(function () {
+      try {
+        // Ray-cast from the CENTER of the screen to the globe surface
+        const screenCenter = new Cesium.Cartesian2(
+          viewer.canvas.clientWidth / 2,
+          viewer.canvas.clientHeight / 2,
+        );
+        const ray = viewer.camera.getPickRay(screenCenter);
+        const groundPos = viewer.scene.globe.pick(ray, viewer.scene);
+
+        let lat, lng;
+        if (groundPos) {
+          // ✅ Got exact ground point under the crosshair
+          const carto = Cesium.Cartographic.fromCartesian(groundPos);
+          lat = Cesium.Math.toDegrees(carto.latitude);
+          lng = Cesium.Math.toDegrees(carto.longitude);
+        } else {
+          // Fallback: camera is pointing at sky — use camera position
+          const carto = viewer.camera.positionCartographic;
+          if (!carto) return;
+          lat = Cesium.Math.toDegrees(carto.latitude);
+          lng = Cesium.Math.toDegrees(carto.longitude);
+        }
+
+        // Only update if position actually changed
+        if (Math.abs(lat - selectedLat) < 0.00001 && Math.abs(lng - selectedLng) < 0.00001) return;
+        selectedLat = lat;
+        selectedLng = lng;
+
+        // Debounce — fire 700ms after camera stops moving
+        clearTimeout(geocodeTimer);
+        geocodeTimer = setTimeout(() => {
+          postToFlutter({ type: 'center', lat, lng });
+        }, 700);
+      } catch (_) { }
+    });
+
+    // ─── Start ────────────────────────────────────────────────────────────────────
+    loadGoogleTiles();
+  </script>
+</body>
+
+</html>

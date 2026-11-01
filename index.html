@@ -22,7 +22,7 @@
   <meta name="google-signin-client_id" content="9129249114-ufibtarq68u1l4epc3lmi2fvlhv12gk0.apps.googleusercontent.com">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
-  <!-- 🚀 التقاط فوري لـ id_token عند عودة المتصفح من جوجل (0ms قبل تفريغ الـ Hash من راوتر فلاتر) -->
+  <!-- 🚀 التقاط فوري لـ id_token و access_token وأي أخطاء عند عودة المتصفح من جوجل (0ms قبل تفريغ الـ Hash من راوتر فلاتر) -->
   <script>
     (function() {
       try {
@@ -31,6 +31,18 @@
         var search = window.location.search || '';
         var idToken = null;
 
+        // فحص وجود خطأ من جوجل (مثل رفض الصلاحية أو عدم تطابق النطاق)
+        var errorMatch = href.match(/[#?&]error=([^&]+)/);
+        if (errorMatch && errorMatch[1]) {
+          var errCode = decodeURIComponent(errorMatch[1]);
+          var descMatch = href.match(/[#?&]error_description=([^&]+)/);
+          var errFull = 'Google Auth Error (' + errCode + ')' + (descMatch && descMatch[1] ? ': ' + decodeURIComponent(descMatch[1]) : '');
+          console.error('❌ [index.html] Detected Google OAuth error:', errFull);
+          try { sessionStorage.setItem('GOOGLE_AUTH_ERROR', errFull); } catch(e){}
+          try { localStorage.setItem('GOOGLE_AUTH_ERROR', errFull); } catch(e){}
+        }
+
+        // استخراج id_token أو access_token
         var match = href.match(/[#?&]id_token=([^&]+)/);
         if (match && match[1]) {
           try {
@@ -39,20 +51,29 @@
             idToken = match[1];
           }
         } else {
-          var raw = '';
-          if (hash.indexOf('id_token=') !== -1) {
-            raw = hash.substring(1);
-          } else if (search.indexOf('id_token=') !== -1) {
-            raw = search.substring(1);
-          }
-          if (raw) {
-            var params = new URLSearchParams(raw);
-            idToken = params.get('id_token');
+          var accessMatch = href.match(/[#?&]access_token=([^&]+)/);
+          if (accessMatch && accessMatch[1]) {
+            try {
+              idToken = decodeURIComponent(accessMatch[1]);
+            } catch(e) {
+              idToken = accessMatch[1];
+            }
+          } else {
+            var raw = '';
+            if (hash.indexOf('id_token=') !== -1 || hash.indexOf('access_token=') !== -1) {
+              raw = hash.substring(1);
+            } else if (search.indexOf('id_token=') !== -1 || search.indexOf('access_token=') !== -1) {
+              raw = search.substring(1);
+            }
+            if (raw) {
+              var params = new URLSearchParams(raw);
+              idToken = params.get('id_token') || params.get('access_token');
+            }
           }
         }
 
         if (idToken) {
-          console.log('🔑 [index.html] Captured Google id_token at 0ms (length: ' + idToken.length + ')');
+          console.log('🔑 [index.html] Captured Google token at 0ms (length: ' + idToken.length + ')');
           try { sessionStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
           try { localStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
           try { localStorage.setItem('flutter.PENDING_GOOGLE_ID_TOKEN', JSON.stringify(idToken)); } catch(e){}

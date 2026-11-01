@@ -22,6 +22,33 @@
   <meta name="google-signin-client_id" content="9129249114-ufibtarq68u1l4epc3lmi2fvlhv12gk0.apps.googleusercontent.com">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
+  <!-- 🚀 التقاط فوري لـ id_token عند عودة المتصفح من جوجل (0ms قبل تفريغ الـ Hash من راوتر فلاتر) -->
+  <script>
+    (function() {
+      try {
+        var hash = window.location.hash || '';
+        var search = window.location.search || '';
+        var raw = '';
+        if (hash.indexOf('id_token=') !== -1) {
+          raw = hash.substring(1);
+        } else if (search.indexOf('id_token=') !== -1) {
+          raw = search.substring(1);
+        }
+        if (raw) {
+          var params = new URLSearchParams(raw);
+          var idToken = params.get('id_token');
+          if (idToken) {
+            console.log('🔑 [index.html] Captured Google id_token at 0ms (length: ' + idToken.length + ')');
+            localStorage.setItem('flutter.PENDING_GOOGLE_ID_TOKEN', idToken);
+            sessionStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken);
+          }
+        }
+      } catch (e) {
+        console.error('Error saving OAuth token in index.html:', e);
+      }
+    })();
+  </script>
+
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="favicon.png"/>
   <link rel="shortcut icon" type="image/png" href="favicon.png"/>
@@ -257,6 +284,6 @@
     setTimeout(hideMashaweerSplash, 12000);
   </script>
 
-  <script src="flutter_bootstrap.js?v=20261101_v4" async></script>
+  <script src="flutter_bootstrap.js?v=20261101_v5" async></script>
 </body>
 </html>

@@ -22,6 +22,41 @@
   <meta name="google-signin-client_id" content="9129249114-ufibtarq68u1l4epc3lmi2fvlhv12gk0.apps.googleusercontent.com">
   <script src="https://accounts.google.com/gsi/client" async defer></script>
 
+  <!-- 💻 GIS Desktop Google Token Client (Direct popup, no redirect loops, no postMessage issues) -->
+  <script>
+    window.requestDesktopGoogleToken = function() {
+      return new Promise(function(resolve, reject) {
+        try {
+          if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+            console.error('Google GIS library not loaded');
+            reject('Google GIS library not loaded');
+            return;
+          }
+          var client = google.accounts.oauth2.initTokenClient({
+            client_id: '9129249114-ufibtarq68u1l4epc3lmi2fvlhv12gk0.apps.googleusercontent.com',
+            scope: 'openid email profile',
+            prompt: 'select_account',
+            callback: function(resp) {
+              if (resp.error) {
+                console.warn('Google Sign-In error:', resp.error);
+                reject(resp.error);
+              } else if (resp.access_token) {
+                console.log('✅ [GIS Desktop] Google access_token obtained');
+                resolve(resp.access_token);
+              } else {
+                reject('No access_token returned');
+              }
+            }
+          });
+          client.requestAccessToken({ prompt: 'select_account' });
+        } catch(err) {
+          console.error('Error in requestDesktopGoogleToken:', err);
+          reject(err.toString());
+        }
+      });
+    };
+  </script>
+
   <!-- 🚀 التقاط فوري لـ id_token و access_token وأي أخطاء عند عودة المتصفح من جوجل (0ms قبل تفريغ الـ Hash من راوتر فلاتر) -->
   <script>
     (function() {

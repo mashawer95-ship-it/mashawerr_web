@@ -26,27 +26,40 @@
   <script>
     (function() {
       try {
+        var href = window.location.href || '';
         var hash = window.location.hash || '';
         var search = window.location.search || '';
-        var raw = '';
-        if (hash.indexOf('id_token=') !== -1) {
-          raw = hash.substring(1);
-        } else if (search.indexOf('id_token=') !== -1) {
-          raw = search.substring(1);
-        }
-        if (raw) {
-          var params = new URLSearchParams(raw);
-          var idToken = params.get('id_token');
-          if (idToken) {
-            console.log('🔑 [index.html] Captured Google id_token at 0ms (length: ' + idToken.length + ')');
-            try { sessionStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
-            try { localStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
-            try { localStorage.setItem('flutter.PENDING_GOOGLE_ID_TOKEN', JSON.stringify(idToken)); } catch(e){}
-            window.addEventListener('DOMContentLoaded', function() {
-              var m = document.getElementById('splash-auth-msg');
-              if (m) m.style.display = 'block';
-            });
+        var idToken = null;
+
+        var match = href.match(/[#?&]id_token=([^&]+)/);
+        if (match && match[1]) {
+          try {
+            idToken = decodeURIComponent(match[1]);
+          } catch(e) {
+            idToken = match[1];
           }
+        } else {
+          var raw = '';
+          if (hash.indexOf('id_token=') !== -1) {
+            raw = hash.substring(1);
+          } else if (search.indexOf('id_token=') !== -1) {
+            raw = search.substring(1);
+          }
+          if (raw) {
+            var params = new URLSearchParams(raw);
+            idToken = params.get('id_token');
+          }
+        }
+
+        if (idToken) {
+          console.log('🔑 [index.html] Captured Google id_token at 0ms (length: ' + idToken.length + ')');
+          try { sessionStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
+          try { localStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
+          try { localStorage.setItem('flutter.PENDING_GOOGLE_ID_TOKEN', JSON.stringify(idToken)); } catch(e){}
+          window.addEventListener('DOMContentLoaded', function() {
+            var m = document.getElementById('splash-auth-msg');
+            if (m) m.style.display = 'block';
+          });
         }
       } catch (e) {
         console.error('Error saving OAuth token in index.html:', e);
@@ -290,6 +303,6 @@
     setTimeout(hideMashaweerSplash, 12000);
   </script>
 
-  <script src="flutter_bootstrap.js?v=20261101_v8" async></script>
+  <script src="flutter_bootstrap.js?v=20261101_v9" async></script>
 </body>
 </html>

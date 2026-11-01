@@ -42,6 +42,10 @@
             try { sessionStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
             try { localStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
             try { localStorage.setItem('flutter.PENDING_GOOGLE_ID_TOKEN', JSON.stringify(idToken)); } catch(e){}
+            window.addEventListener('DOMContentLoaded', function() {
+              var m = document.getElementById('splash-auth-msg');
+              if (m) m.style.display = 'block';
+            });
           }
         }
       } catch (e) {
@@ -246,6 +250,7 @@
   <!-- 🏎️ شاشة البداية المباشرة (خلفية بيضاء نظيفة بدون أي صورة أيقونة ثابتة) -->
   <div id="mashaweer-splash-loader">
     <div class="splash-container">
+      <div id="splash-auth-msg" style="display:none; font-family:'Almarai',sans-serif; font-size:15px; font-weight:bold; color:#222; margin-bottom:16px;">مرحباً بك! جارٍ تأكيد تسجيل الدخول...</div>
       <div class="splash-progress-track">
         <div class="splash-progress-bar"></div>
       </div>
@@ -285,6 +290,6 @@
     setTimeout(hideMashaweerSplash, 12000);
   </script>
 
-  <script src="flutter_bootstrap.js?v=20261101_v7" async></script>
+  <script src="flutter_bootstrap.js?v=20261101_v8" async></script>
 </body>
 </html>

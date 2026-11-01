@@ -39,8 +39,9 @@
           var idToken = params.get('id_token');
           if (idToken) {
             console.log('🔑 [index.html] Captured Google id_token at 0ms (length: ' + idToken.length + ')');
-            localStorage.setItem('flutter.PENDING_GOOGLE_ID_TOKEN', idToken);
-            sessionStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken);
+            try { sessionStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
+            try { localStorage.setItem('PENDING_GOOGLE_ID_TOKEN', idToken); } catch(e){}
+            try { localStorage.setItem('flutter.PENDING_GOOGLE_ID_TOKEN', JSON.stringify(idToken)); } catch(e){}
           }
         }
       } catch (e) {
@@ -284,6 +285,6 @@
     setTimeout(hideMashaweerSplash, 12000);
   </script>
 
-  <script src="flutter_bootstrap.js?v=20261101_v5" async></script>
+  <script src="flutter_bootstrap.js?v=20261101_v6" async></script>
 </body>
 </html>
